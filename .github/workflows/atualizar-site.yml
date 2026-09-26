@@ -1,0 +1,56 @@
+name: Atualizar oportunidades e publicar site
+
+# Roda todo dia às 09:00 UTC (≈ 06:00 no horário de Brasília) e também pode
+# ser disparado manualmente na aba "Actions" do GitHub.
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch: {}
+
+# Permissões necessárias para publicar no GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  atualizar-e-publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Baixar o código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Rodar o coletor de oportunidades (busca real na web)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python agente_bolsas.py --max-queries 20
+
+      - name: Gerar o site estático (pasta docs/)
+        run: python build_site.py
+
+      - name: Preparar publicação no GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Empacotar os arquivos do site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Publicar no GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
